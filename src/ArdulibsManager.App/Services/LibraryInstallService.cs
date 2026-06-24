@@ -18,7 +18,9 @@ public sealed class LibraryInstallService
     public async Task<InstalledLibrary> InstallAsync(GithubRepository repo, string tag, string librariesPath, IProgress<string>? log = null, string? targetPathOverride = null, CancellationToken ct = default)
     {
         Directory.CreateDirectory(librariesPath);
+        var librariesRoot = Path.GetFullPath(librariesPath);
         var tempRoot = Path.Combine(Path.GetTempPath(), "ArdulibsManager", Guid.NewGuid().ToString("N"));
+        var stagingPath = Path.Combine(librariesRoot, ".ardulibs-staging-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         var zipPath = Path.Combine(tempRoot, "repo.zip");
         var extractPath = Path.Combine(tempRoot, "extract");
@@ -42,39 +44,21 @@ public sealed class LibraryInstallService
             var props = LibraryProperties.Parse(await File.ReadAllTextAsync(propsPath, ct));
             var folderName = SanitizeFolderName(props.Name ?? repo.Name);
             var targetPath = !string.IsNullOrWhiteSpace(targetPathOverride)
-                ? targetPathOverride
-                : Path.Combine(librariesPath, folderName);
-            var backupPath = CreateBackupPath(repo, tag, targetPath);
+                ? Path.GetFullPath(targetPathOverride)
+                : Path.Combine(librariesRoot, folderName);
 
-            if (Directory.Exists(targetPath))
-            {
-                if (_settings.Current.BackupBeforeReplace)
-                {
-                    log?.Report("Создание backup...");
-                    Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
-                    Directory.Move(targetPath, backupPath);
-                }
-                else
-                {
-                    Directory.Delete(targetPath, recursive: true);
-                }
-            }
+            EnsureInsideLibraries(librariesRoot, targetPath);
 
-            try
-            {
-                log?.Report("Копирование в папку libraries...");
-                CopyDirectory(libRoot, targetPath);
-                await WriteManagerMetadataAsync(targetPath, repo, tag, ct);
+            log?.Report("Подготовка новой версии...");
+            CopyDirectory(libRoot, stagingPath);
+            await WriteManagerMetadataAsync(stagingPath, repo, tag, ct);
 
-                if (Directory.Exists(backupPath))
-                    log?.Report($"Backup сохранён: {backupPath}");
-            }
-            catch
-            {
-                if (Directory.Exists(targetPath)) Directory.Delete(targetPath, true);
-                if (Directory.Exists(backupPath)) Directory.Move(backupPath, targetPath);
-                throw;
-            }
+            var stagedProps = Path.Combine(stagingPath, "library.properties");
+            if (!File.Exists(stagedProps))
+                throw new InvalidOperationException("Ошибка подготовки: library.properties не найден в подготовленной папке.");
+
+            log?.Report("Атомарная замена библиотеки...");
+            ReplaceDirectoryAtomic(stagingPath, targetPath, librariesRoot, log);
 
             log?.Report("Готово.");
             return new InstalledLibrary
@@ -90,26 +74,67 @@ public sealed class LibraryInstallService
         }
         finally
         {
-            try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            TryDeleteDirectory(tempRoot);
+            TryDeleteDirectory(stagingPath);
         }
     }
 
     public Task RemoveAsync(InstalledLibrary lib)
     {
-        if (Directory.Exists(lib.LocalPath)) Directory.Delete(lib.LocalPath, recursive: true);
+        var librariesRoot = Path.GetFullPath(_settings.Current.LibrariesPath);
+        var targetPath = Path.GetFullPath(lib.LocalPath);
+        EnsureInsideLibraries(librariesRoot, targetPath);
+
+        var propsPath = Path.Combine(targetPath, "library.properties");
+        if (!File.Exists(propsPath))
+            throw new InvalidOperationException("Удаление отменено: в папке библиотеки не найден library.properties.");
+
+        if (Directory.Exists(targetPath))
+            Directory.Delete(targetPath, recursive: true);
+
         return Task.CompletedTask;
     }
 
-    private static string CreateBackupPath(GithubRepository repo, string tag, string targetPath)
+    private static void ReplaceDirectoryAtomic(string stagingPath, string targetPath, string librariesRoot, IProgress<string>? log)
     {
-        var appDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ArdulibsManager",
-            "Backups");
-        var safeRepo = SanitizeFolderName(repo.FullName.Replace('/', '_'));
-        var safeTag = SanitizeFolderName(tag);
-        var folder = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return Path.Combine(appDir, safeRepo, $"{folder}_{safeTag}_{DateTime.Now:yyyyMMdd_HHmmss}");
+        var oldPath = Path.Combine(librariesRoot, ".ardulibs-old-" + Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) + "-" + Guid.NewGuid().ToString("N"));
+
+        if (!Directory.Exists(targetPath))
+        {
+            Directory.Move(stagingPath, targetPath);
+            return;
+        }
+
+        Directory.Move(targetPath, oldPath);
+        try
+        {
+            Directory.Move(stagingPath, targetPath);
+        }
+        catch
+        {
+            TryDeleteDirectory(targetPath);
+            if (Directory.Exists(oldPath) && !Directory.Exists(targetPath))
+                Directory.Move(oldPath, targetPath);
+            throw;
+        }
+
+        try
+        {
+            Directory.Delete(oldPath, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            log?.Report("Новая версия установлена, но временную старую папку не удалось удалить: " + ex.Message);
+        }
+    }
+
+    private static void EnsureInsideLibraries(string librariesRoot, string targetPath)
+    {
+        librariesRoot = Path.GetFullPath(librariesRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        targetPath = Path.GetFullPath(targetPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+        if (!targetPath.StartsWith(librariesRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Операция отменена: путь библиотеки находится вне папки Arduino libraries.");
     }
 
     private static async Task WriteManagerMetadataAsync(string targetPath, GithubRepository repo, string tag, CancellationToken ct)
@@ -141,6 +166,19 @@ public sealed class LibraryInstallService
         foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
             File.Copy(file, file.Replace(source, destination), overwrite: true);
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // best effort cleanup
         }
     }
 }

@@ -17,6 +17,8 @@ public sealed class GithubService
     {
         _http = http;
         _settings = settings;
+        if (_http.Timeout == System.Threading.Timeout.InfiniteTimeSpan)
+            _http.Timeout = TimeSpan.FromSeconds(30);
         _http.DefaultRequestHeaders.UserAgent.Clear();
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ArdulibsManager", "0.1"));
     }

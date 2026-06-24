@@ -16,6 +16,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly LibraryScannerService _scanner;
     private readonly LibraryInstallService _installer;
     private readonly DependencyResolverService _dependencyResolver;
+    private readonly SemaphoreSlim _libraryOperationLock = new(1, 1);
 
     private IReadOnlyList<GithubRepository> _repositories = Array.Empty<GithubRepository>();
     private string _searchText = string.Empty;
@@ -91,7 +92,7 @@ public sealed class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
-        var http = new HttpClient();
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         _settings = new SettingsService();
         var cache = new CacheService();
         _registry = new RepositoryRegistryService(http, cache, _settings);
@@ -290,6 +291,9 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (!await TryEnterLibraryOperationAsync("Установка уже выполняется. Дождитесь окончания текущей операции."))
+            return;
+
         IsBusy = true;
         try
         {
@@ -316,7 +320,11 @@ public sealed class MainViewModel : ObservableObject
             Log("Ошибка установки: " + ex.Message);
             MessageBox.Show(ex.Message, "Ошибка установки", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            LeaveLibraryOperation();
+        }
     }
 
     private MessageBoxResult ConfirmDependencies(IReadOnlyList<DependencyPlanItem> dependencyPlan)
@@ -353,6 +361,10 @@ public sealed class MainViewModel : ObservableObject
         if (repo is null) return;
         var tag = lib.LatestVersion ?? await _github.GetLatestTagNameAsync(repo);
         if (string.IsNullOrWhiteSpace(tag)) return;
+
+        if (!await TryEnterLibraryOperationAsync("Обновление уже выполняется. Дождитесь окончания текущей операции."))
+            return;
+
         IsBusy = true;
         try
         {
@@ -365,7 +377,11 @@ public sealed class MainViewModel : ObservableObject
             Log("Ошибка обновления: " + ex.Message);
             MessageBox.Show(ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            LeaveLibraryOperation();
+        }
     }
 
     private async Task UpdateAllWithUpdatesAsync()
@@ -379,6 +395,9 @@ public sealed class MainViewModel : ObservableObject
 
         var confirm = MessageBox.Show($"Обновить библиотеки с доступными обновлениями?\nКоличество: {libs.Count}", "Обновление библиотек", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
+
+        if (!await TryEnterLibraryOperationAsync("Обновление уже выполняется. Дождитесь окончания текущей операции."))
+            return;
 
         IsBusy = true;
         try
@@ -411,7 +430,11 @@ public sealed class MainViewModel : ObservableObject
             Log("Ошибка массового обновления: " + ex.Message);
             MessageBox.Show(ex.Message, "Ошибка массового обновления", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            LeaveLibraryOperation();
+        }
     }
 
     private async Task RemoveAsync(InstalledLibrary? lib)
@@ -419,9 +442,27 @@ public sealed class MainViewModel : ObservableObject
         if (lib is null) return;
         var confirm = MessageBox.Show($"Удалить библиотеку '{lib.Name}'?\n{lib.LocalPath}", "Удаление", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
-        await _installer.RemoveAsync(lib);
-        Log("Удалено: " + lib.Name);
-        await ScanInstalledAsync();
+
+        if (!await TryEnterLibraryOperationAsync("Операция с библиотеками уже выполняется. Дождитесь окончания текущей операции."))
+            return;
+
+        IsBusy = true;
+        try
+        {
+            await _installer.RemoveAsync(lib);
+            Log("Удалено: " + lib.Name);
+            await ScanInstalledAsync();
+        }
+        catch (Exception ex)
+        {
+            Log("Ошибка удаления: " + ex.Message);
+            MessageBox.Show(ex.Message, "Ошибка удаления", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+            LeaveLibraryOperation();
+        }
     }
 
     private async Task SaveSettingsAsync()
@@ -445,6 +486,28 @@ public sealed class MainViewModel : ObservableObject
         };
         if (dialog.ShowDialog() == true)
             LibrariesPath = dialog.FolderName;
+    }
+
+    private async Task<bool> TryEnterLibraryOperationAsync(string busyMessage)
+    {
+        if (await _libraryOperationLock.WaitAsync(0))
+            return true;
+
+        Log(busyMessage);
+        MessageBox.Show(busyMessage, "Операция уже выполняется", MessageBoxButton.OK, MessageBoxImage.Information);
+        return false;
+    }
+
+    private void LeaveLibraryOperation()
+    {
+        try
+        {
+            _libraryOperationLock.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // ignore double release protection
+        }
     }
 
     private static void OpenFolder(string path)

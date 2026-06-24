@@ -14,11 +14,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\user\\Desktop\\ArdulibsManager\\src\\ArdulibsManager.App\\ArdulibsManager.App.csproj",
+      "projectUniqueName": "D:\\YandexDisk\\AG\\GitHub\\AlexGyver\\ArdulibsManager\\src\\ArdulibsManager.App\\ArdulibsManager.App.csproj",
       "projectName": "ArdulibsManager",
-      "projectPath": "C:\\Users\\user\\Desktop\\ArdulibsManager\\src\\ArdulibsManager.App\\ArdulibsManager.App.csproj",
+      "projectPath": "D:\\YandexDisk\\AG\\GitHub\\AlexGyver\\ArdulibsManager\\src\\ArdulibsManager.App\\ArdulibsManager.App.csproj",
       "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\user\\Desktop\\ArdulibsManager\\src\\ArdulibsManager.App\\obj\\",
+      "outputPath": "D:\\YandexDisk\\AG\\GitHub\\AlexGyver\\ArdulibsManager\\src\\ArdulibsManager.App\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"

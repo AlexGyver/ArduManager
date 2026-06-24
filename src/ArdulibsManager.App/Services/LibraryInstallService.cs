@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Text.Json;
 using ArdulibsManager.Models;
 
 namespace ArdulibsManager.Services;
@@ -51,7 +50,6 @@ public sealed class LibraryInstallService
 
             log?.Report("Подготовка новой версии...");
             CopyDirectory(libRoot, stagingPath);
-            await WriteManagerMetadataAsync(stagingPath, repo, tag, ct);
 
             var stagedProps = Path.Combine(stagingPath, "library.properties");
             if (!File.Exists(stagedProps))
@@ -135,19 +133,6 @@ public sealed class LibraryInstallService
 
         if (!targetPath.StartsWith(librariesRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Операция отменена: путь библиотеки находится вне папки Arduino libraries.");
-    }
-
-    private static async Task WriteManagerMetadataAsync(string targetPath, GithubRepository repo, string tag, CancellationToken ct)
-    {
-        var metadata = new
-        {
-            repo = repo.FullName,
-            url = repo.Url,
-            installedRef = tag,
-            installedAt = DateTimeOffset.UtcNow
-        };
-        var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(Path.Combine(targetPath, ".github-library-manager.json"), json, ct);
     }
 
     private static string SanitizeFolderName(string name)

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ArdulibsManager")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7ec886f0faa41c4f2788b7e449717fed33edaa63")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+56fd4a1094cf95b80a8320c755bf361017a2047a")]
 [assembly: System.Reflection.AssemblyProductAttribute("ArdulibsManager")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ArdulibsManager")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

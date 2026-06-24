@@ -6,17 +6,24 @@ namespace ArdulibsManager.Services;
 public static class VersionService
 {
     public static IReadOnlyList<GithubTag> SortTags(IEnumerable<GithubTag> tags)
-        => tags.OrderByDescending(x => ParseVersionOrNull(x.Name))
-               .ThenByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase)
+        => tags.Select(x => new { Tag = x, Version = ParseVersionOrNull(x.Name) })
+               .OrderByDescending(x => x.Version is not null)
+               .ThenByDescending(x => x.Version)
+               .ThenByDescending(x => x.Tag.Name, StringComparer.OrdinalIgnoreCase)
+               .Select(x => x.Tag)
                .ToList();
 
     public static bool IsNewer(string? candidate, string? current)
     {
         var a = ParseVersionOrNull(candidate);
         var b = ParseVersionOrNull(current);
-        if (a is not null && b is not null) return a > b;
-        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(current)) return false;
-        return !Normalize(candidate).Equals(Normalize(current), StringComparison.OrdinalIgnoreCase);
+
+        // Для автообновлений сравниваем только теги, похожие на нормальные версии.
+        // Иначе репозиторий с посторонними тегами вроде TM74HC595_Gyver может ошибочно
+        // выглядеть как обновление для локальной версии 1.0.
+        if (a is null || b is null) return false;
+
+        return a > b;
     }
 
     public static bool IsSameVersion(string? a, string? b)
@@ -26,6 +33,8 @@ public static class VersionService
         if (va is not null && vb is not null) return va == vb;
         return Normalize(a).Equals(Normalize(b), StringComparison.OrdinalIgnoreCase);
     }
+
+    public static bool LooksLikeVersion(string? value) => ParseVersionOrNull(value) is not null;
 
     private static string Normalize(string? value)
         => (value ?? string.Empty).Trim().TrimStart('v', 'V');

@@ -22,10 +22,6 @@ public sealed class LibraryScannerService
             {
                 var text = await File.ReadAllTextAsync(propsPath, ct);
                 var props = LibraryProperties.Parse(text);
-                var repo = !string.IsNullOrWhiteSpace(props.Url)
-                    ? RepositoryRegistryService.ParseGithubUrl(props.Url!)
-                    : null;
-
                 list.Add(new InstalledLibrary
                 {
                     Name = props.Name ?? Path.GetFileName(dir),
@@ -33,8 +29,8 @@ public sealed class LibraryScannerService
                     Maintainer = props.Maintainer,
                     Url = props.Url,
                     LocalPath = dir,
-                    RepositoryFullName = repo?.FullName,
-                    Status = repo is null ? "Не GitHub / неизвестный источник" : "OK"
+                    RepositoryFullName = null,
+                    Status = "Не проверено"
                 });
             }
             catch (Exception ex)

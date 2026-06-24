@@ -243,16 +243,27 @@ public sealed class MainViewModel : ObservableObject
 
         foreach (var lib in InstalledLibraries.ToList())
         {
-            if (string.IsNullOrWhiteSpace(lib.Url)) continue;
-            var repo = RepositoryRegistryService.ParseGithubUrl(lib.Url!);
-            if (repo is null) continue;
+            var repo = ResolveRepositoryForInstalledLibrary(lib);
+            if (repo is null)
+            {
+                lib.LatestVersion = null;
+                lib.HasUpdate = false;
+                lib.Status = "Не найдено точное совпадение name/repo";
+                continue;
+            }
+
             lib.IsChecking = true;
             try
             {
                 var latest = await _github.GetLatestTagNameAsync(repo);
                 lib.LatestVersion = latest;
                 lib.HasUpdate = VersionService.IsNewer(latest, lib.Version);
-                lib.Status = lib.HasUpdate ? "Есть обновление" : "Актуально";
+                if (string.IsNullOrWhiteSpace(latest))
+                    lib.Status = "Теги не найдены";
+                else if (!VersionService.LooksLikeVersion(latest))
+                    lib.Status = "Теги не похожи на версии";
+                else
+                    lib.Status = lib.HasUpdate ? "Есть обновление" : "Актуально";
                 if (lib.HasUpdate) updated.Add(lib);
             }
             catch (Exception ex)
@@ -275,9 +286,32 @@ public sealed class MainViewModel : ObservableObject
 
     private InstalledLibrary? FindInstalled(GithubRepository repo)
     {
-        return InstalledLibraries.FirstOrDefault(x =>
-            x.RepositoryFullName?.Equals(repo.FullName, StringComparison.OrdinalIgnoreCase) == true ||
-            x.Url?.Contains(repo.FullName, StringComparison.OrdinalIgnoreCase) == true);
+        return InstalledLibraries.FirstOrDefault(x => NamesMatch(x.Name, repo.Name));
+    }
+
+    private GithubRepository? ResolveRepositoryForInstalledLibrary(InstalledLibrary lib)
+    {
+        if (string.IsNullOrWhiteSpace(lib.Name)) return null;
+
+        // Для обновлений НЕ используем library.properties url как источник истины.
+        // Репозиторий должен быть найден в registry по строгому совпадению имени библиотеки
+        // из library.properties с именем GitHub-репозитория.
+        return _repositories.FirstOrDefault(r => NamesMatch(lib.Name, r.Name));
+    }
+
+    private static bool NamesMatch(string? libraryName, string? repositoryName)
+    {
+        return NormalizeName(libraryName) == NormalizeName(repositoryName);
+    }
+
+    private static string NormalizeName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var chars = value
+            .Trim()
+            .Where(ch => ch != ' ' && ch != '_' && ch != '-')
+            .Select(char.ToLowerInvariant);
+        return new string(chars.ToArray());
     }
 
     private async Task InstallSelectedAsync(SearchResult? result)
@@ -356,9 +390,13 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task UpdateAsync(InstalledLibrary? lib)
     {
-        if (lib is null || string.IsNullOrWhiteSpace(lib.Url)) return;
-        var repo = RepositoryRegistryService.ParseGithubUrl(lib.Url!);
-        if (repo is null) return;
+        if (lib is null) return;
+        var repo = ResolveRepositoryForInstalledLibrary(lib);
+        if (repo is null)
+        {
+            MessageBox.Show("Обновление недоступно: имя библиотеки из library.properties не совпадает с именем репозитория в registry.", "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         var tag = lib.LatestVersion ?? await _github.GetLatestTagNameAsync(repo);
         if (string.IsNullOrWhiteSpace(tag)) return;
 
@@ -386,7 +424,7 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task UpdateAllWithUpdatesAsync()
     {
-        var libs = InstalledLibraries.Where(x => x.HasUpdate && !string.IsNullOrWhiteSpace(x.Url)).ToList();
+        var libs = InstalledLibraries.Where(x => x.HasUpdate && ResolveRepositoryForInstalledLibrary(x) is not null).ToList();
         if (libs.Count == 0)
         {
             MessageBox.Show("Библиотек с обновлениями не найдено.", "Обновление библиотек", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -404,10 +442,10 @@ public sealed class MainViewModel : ObservableObject
         {
             foreach (var lib in libs)
             {
-                var repo = RepositoryRegistryService.ParseGithubUrl(lib.Url!);
+                var repo = ResolveRepositoryForInstalledLibrary(lib);
                 if (repo is null)
                 {
-                    Log("Пропущено: не удалось определить GitHub repo для " + lib.Name);
+                    Log("Пропущено: нет точного совпадения name/repo для " + lib.Name);
                     continue;
                 }
 

@@ -42,4 +42,4 @@
 - Если dependency name сильно отличается от repo name, автоматический поиск зависимости может не сработать
 
 ## Запуск исходника
-Нужен SDK .NET 8. Далее запускаем `dotnet restore && dotnet run --project src/ArdulibsManager.App`.
+Нужен [SDK .NET 8](https://dotnet.microsoft.com/ru-ru/download/dotnet/8.0). Далее запускаем `dotnet restore && dotnet run --project src/ArdulibsManager.App`.

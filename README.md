@@ -1,16 +1,22 @@
 # ArduManager
-Кастомный менеджер Arduino-библиотек и платформ для Windows. Работает напрямую с GitHub, а не с экосистемой Arduino, которая заблокировала доступ пользователям из России
+Кастомный менеджер Arduino-библиотек и плат для Windows. Работает напрямую с GitHub, а не с экосистемой Arduino, которая заблокировала доступ пользователям из России
 
 Скачать свежую версию:
 - Windows 64 bit: [релиз](https://github.com/AlexGyver/ArduManager/releases/latest/download/ArduManager-x64.exe), [Яндекс.Диск](https://disk.yandex.ru/d/bZ77gGHrPNZJBw)
 - Windows 32 bit: [релиз](https://github.com/AlexGyver/ArduManager/releases/latest/download/ArduManager-x86.exe), [Яндекс.Диск](https://disk.yandex.ru/d/9WKubhTYC0kM2g)
+
+Ссылки на перезаливы Arduino IDE есть в уроках:
+- [Arduino IDE v1](https://alexgyver.ru/lessons/arduino-ide/)
+- [Arduino IDE v2](https://alexgyver.ru/lessons/arduino-ide-v2/)
 
 Возможности:
 - Работа напрямую с GitHub-списком библиотек в обход Arduino
 - Рекурсивная установка зависимостей
 - Сканирование и менеджмент установленных библиотек
 - Проверка обновлений
-- Установка и обновление платформ
+- Установка и обновление плат
+
+![ardu](/arduman.png)
 
 ## GitHub token
 Токен необязателен. Он нужен только для повышения лимитов GitHub API. Когда может понадобиться:
@@ -36,8 +42,11 @@
 - Managing your personal access tokens: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 - Rate limits for the REST API: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 
-## Ограничения
-- Версии берутся из GitHub tags - не все репозитории имеют аккуратные tags/releases, что-то может пойти не так
+## Ограничения плат
+- Не все файлы плат и платформ лежат на GitHub, где-то скачивание может производиться с заблокированных для РФ ресурсов. В этом случае нужно делать свой index.json и размещать файлы в доступных хранилищах. Данная утилита просто качает файлы по указанным ссылкам
+
+## Ограничения библиотек
+- Версии библиотек берутся из GitHub tags - не все репозитории имеют аккуратные tags/releases, что-то может пойти не так
 - Если dependency name сильно отличается от repo name, автоматический поиск зависимости может не сработать
 
 ## Запуск исходника
